@@ -21,9 +21,9 @@ from math import inf
 
 # hyperparameters configuration
 path = 'data'
-process = 'sample_data.csv'
+process = 'dim512.txt'  #sample_data.csv
 auto_cloud_m = 2
-type_of_pre_pross = 'mahalanobis' # 'Word2Vec', 'text_to_numbers', 'mahalanobis'
+type_of_pre_pross = 'Autocloud'  # 'Word2Vec', 'text_to_numbers', 'mahalanobis', 'Autocloud'
 log_type = 2
 parameters = [(60, 700), (40, 600), (50, 500), (100, 400), (50, 300)]
 
@@ -94,17 +94,17 @@ if type_of_pre_pross == 'Word2Vec':
     vectors = pa.average_feature_vector(cases, model)
     # normalization
     vectors = scl.fit_transform(vectors)
+
+    # Teste com Distancia
+    x = np.array([pt[0] for pt in vectors])
+    y = np.array([pt[1] for pt in vectors])
+    teste = np.sqrt(np.square(x - x.reshape(-1, 1)) + np.square(y - y.reshape(-1, 1)))
+
     # recebe dados
     data = pd.DataFrame(vectors)
-    dados = np.array(
-        [data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[6], data[8], data[9], data[10],
-         data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19], data[20], data[21],
-         data[22], data[23], data[24], data[25], data[27], data[28], data[29], data[30], data[31], data[32], data[33],
-         data[34], data[35], data[36], data[37], data[38], data[39], data[40], data[41], data[42], data[43], data[44]])
     # chamar autocloud
-    dados = dados.T
+    dados = data.T
     print('Numero de Dimensoes: ', dados.ndim)
-# Não Usa Word2Vec
 elif type_of_pre_pross == 'text_to_numbers':
     # reads event log
     df = pa.read_log(path, process)
@@ -121,7 +121,7 @@ elif type_of_pre_pross == 'text_to_numbers':
     # dados = np.where(np.isnan(dados), 0, dados)
 
     # Para chamar autocloud
-    dados = dados.T
+    # dados = dados.T
 
     print('Numero de Dimensoes: ', dados.ndim)
 
@@ -138,7 +138,7 @@ elif type_of_pre_pross == 'text_to_numbers':
         for j in range(0, np.size(novo_array)):
             if not math.isnan(novo_array[int(j)]):
                 k = novo_array[int(j)]
-                result_array[int(k-1)] += np.long(999000)
+                result_array[int(k - 1)] += np.long(999000)
         new_dados = np.append(new_dados, [result_array], axis=0)
         dados = new_dados
 elif type_of_pre_pross == 'mahalanobis':
@@ -159,7 +159,7 @@ elif type_of_pre_pross == 'mahalanobis':
     Y = df.iloc[:, -1]
     del df
     distancematrix = ot.createDistanceMatrix(vectors, ot.first_time, N)
-    #O is the #of outliers
+    # O is the #of outliers
     for (k, O) in parameters:
         print("Experiment:", i, ", k =", k, ", num_outliers =", O)
         lrd = ot.getLRD(N, distancematrix, k, vectors)
@@ -167,12 +167,25 @@ elif type_of_pre_pross == 'mahalanobis':
         outliers = sorted_outlier_factor_indexes[-O:]
         ot.getAccuracy(outliers, Y, N, PrecisionList, RecallList)
         i += 1
+elif type_of_pre_pross == 'Autocloud':
+    # Carregar Data set
+    data = pd.read_csv('data/a1.csv', sep='\s+', header=None)
+    # Carregar para Array
+    dados = np.array([data[0], data[1]])
+    dados = dados.T
 
-#Inicio AutoCloud
+# Inicio AutoCloud
 teste = ac.AutoCloud(auto_cloud_m)
 # for t in X_embedded:
 for i in range(0, len(dados), 1):
-    teste.run(dados[i], case_id[i])
+    if type_of_pre_pross == 'Autocloud':
+        teste.run(dados[i], 'na')
+    else:
+        teste.run(dados[i], case_id[i])
+
+print(teste.alfa)
+print(teste.listIntersection)
+print(teste.relevanceList)
 
 print('Numero de Clouds: ', np.size(teste.c))
 
@@ -185,16 +198,23 @@ plt.grid()
 
 # Plot amostras e centroides
 dados = dados.T
-plt.plot(dados[0], dados[0], '.g')
-# plt.plot(c_a1[0], c_a1[1], 'or')
+if type_of_pre_pross == 'Autocloud':
+    plt.plot(dados[0], dados[1], '.g')
+    # plt.plot(c_a1[0], c_a1[1], 'or')
+else:
+    plt.plot(dados, '.g')
 
 # Plot AutoCloud centro
 for i in range(0, np.size(teste.c)):
-    plt.plot(teste.c[i].mean[0], teste.c[i].mean[1], 'x', color='black')
+    if type_of_pre_pross == 'Autocloud':
+        plt.plot(teste.c[i].mean[0], teste.c[i].mean[1], 'X', color='orange')
+    else:
+        plt.plot(teste.c[i].mean, 'X', color='orange')
 
-for k in teste.relacao_caso_status:
-    if teste.relacao_caso_status[k][0]:
-        plt.plot(teste.relacao_caso_status[k][1], '.r')
+if not type_of_pre_pross == 'Autocloud':
+    for k in teste.relacao_caso_status:
+        if teste.relacao_caso_status[k][0]:
+            plt.plot(teste.relacao_caso_status[k][1], '.r')
 
 plt.legend(['Amostras', 'Auto-Cloud', 'Anomalias'])
 plt.show()
