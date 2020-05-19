@@ -23,7 +23,7 @@ from math import inf
 path = 'data'
 process = 'sample_data.csv'
 auto_cloud_m = 2
-type_of_pre_pross = 'Autocloud'  # 'Word2Vec', 'text_to_numbers', 'mahalanobis', 'Autocloud'
+type_of_pre_pross = 'Word2Vec'  # 'Word2Vec', 'text_to_numbers', 'mahalanobis', 'Autocloud'
 log_type = 2
 parameters = [(60, 700), (40, 600), (50, 500), (100, 400), (50, 300)]
 
