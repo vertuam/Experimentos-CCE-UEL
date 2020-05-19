@@ -21,7 +21,7 @@ from math import inf
 
 # hyperparameters configuration
 path = 'data'
-process = 'dim512.txt'  #sample_data.csv
+process = 'sample_data.csv'
 auto_cloud_m = 2
 type_of_pre_pross = 'Autocloud'  # 'Word2Vec', 'text_to_numbers', 'mahalanobis', 'Autocloud'
 log_type = 2
@@ -169,23 +169,29 @@ elif type_of_pre_pross == 'mahalanobis':
         i += 1
 elif type_of_pre_pross == 'Autocloud':
     # Carregar Data set
-    data = pd.read_csv('data/a1.csv', sep='\s+', header=None)
-    # Carregar para Array
+    # data = pd.read_csv('data/dim1024.txt', sep='\s+', header=None)
+    # data = pd.read_csv('data/array.txt', sep=',', header=None)
+    data = pd.read_csv('data/dim512.txt', sep='\s+', header=None)
+    # data = pd.read_csv('data/a1.csv', sep='\s+', header=None)
+    # data = pd.read_csv('data/s1.csv', sep='\s+', header=None)
+    # Carregar para Array A1 e S1
     dados = np.array([data[0], data[1]])
+    # dados = np.array([data[0],data[1],data[2],data[3],data[4],data[5],data[6],data[7],data[8],data[9],data[10],data[11],data[12],data[13],data[14]])
     dados = dados.T
 
 # Inicio AutoCloud
 teste = ac.AutoCloud(auto_cloud_m)
 # for t in X_embedded:
-for i in range(0, len(dados), 1):
-    if type_of_pre_pross == 'Autocloud':
-        teste.run(dados[i], 'na')
-    else:
-        teste.run(dados[i], case_id[i])
+if type_of_pre_pross == 'Autocloud':
+    for t in dados:
+        teste.run(np.array(t), 'na')
+else:
+    for i in range(0, len(dados), 1):
+     teste.run(dados[i], case_id[i])
 
-print(teste.alfa)
-print(teste.listIntersection)
-print(teste.relevanceList)
+print('Alfa: ', teste.alfa)
+print('listIntersection: ', teste.listIntersection)
+print('relevanceList: ', teste.relevanceList)
 
 print('Numero de Clouds: ', np.size(teste.c))
 
@@ -194,17 +200,19 @@ print('Normais........: ', teste.normais)
 print('Anomalias......: ', teste.anomalias)
 
 plt.rcParams["figure.figsize"] = (14, 14)
+dados = dados.T
 plt.grid()
 
 # Plot amostras e centroides
 dados = dados.T
 if type_of_pre_pross == 'Autocloud':
     plt.plot(dados[0], dados[1], '.g')
+    # Centroid
     # plt.plot(c_a1[0], c_a1[1], 'or')
 else:
     plt.plot(dados, '.g')
 
-# Plot AutoCloud centro
+# Plot AutoCloud centroids
 for i in range(0, np.size(teste.c)):
     if type_of_pre_pross == 'Autocloud':
         plt.plot(teste.c[i].mean[0], teste.c[i].mean[1], 'X', color='orange')
@@ -212,6 +220,10 @@ for i in range(0, np.size(teste.c)):
         plt.plot(teste.c[i].mean, 'X', color='orange')
 
 if not type_of_pre_pross == 'Autocloud':
+    for k in teste.relacao_caso_status:
+        if teste.relacao_caso_status[k][0]:
+            plt.plot(teste.relacao_caso_status[k][1], '.r')
+else:
     for k in teste.relacao_caso_status:
         if teste.relacao_caso_status[k][0]:
             plt.plot(teste.relacao_caso_status[k][1], '.r')
