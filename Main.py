@@ -229,6 +229,10 @@ else:
             plt.plot(teste.relacao_caso_status[k][1], '.r')
 
 plt.legend(['Amostras', 'Auto-Cloud', 'Anomalias'])
+
+labels = auto_cloud_m
+
+
 plt.show()
 
 elapsed_time = time.time() - start_time

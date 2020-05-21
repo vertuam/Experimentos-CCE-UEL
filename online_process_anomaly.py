@@ -159,6 +159,12 @@ class AutoCloud:
                 typicality = 1 - eccentricity
                 norm_eccentricity = eccentricity / 2
                 norm_typicality = typicality / (AutoCloud.k - 2)
+
+                #if norm_eccentricity > (AutoCloud.m ** 2 + 1) / (2 * n):
+                #    print('True')
+                #else:
+                #    print('False')
+
                 if (norm_eccentricity <= (AutoCloud.m ** 2 + 1) / (2 * n)):
                     data.updateDataCloud(n, mean, variance)
                     AutoCloud.alfa[i] = norm_typicality
@@ -198,20 +204,22 @@ def cases_y_list(df):
     '''
     Creates a list of cases (and their respective labels) for model training
     '''
-    cases = []
+    cases, case_id = [], []
     for group in df.groupby('case_id'):
         case = Case(group[0])
         case.activities = list(group[1].activity)
         case.label = list(group[1].label)[0]
         cases.append(case)
+        case_id.append(group[0])
 
-    return cases
+    return cases, case_id
 
 
 def create_model(cases, dimensions, window, min_count):
     '''
     Creates a word2vec model
     '''
+    print('Creates a word2vec model.')
     model = Word2Vec(
         size=dimensions,
         window=window,
@@ -219,8 +227,24 @@ def create_model(cases, dimensions, window, min_count):
         workers=-1)
     model.build_vocab(cases)
     model.train(cases, total_examples=len(cases), epochs=10)
+    model.wv.vocab
+    model.save("current_model")
 
     return model
+
+
+def update_model(cases):
+    '''
+    TODO
+    Updates word2vec model
+    '''
+    print('Updates a word2vec model.')
+    new_model = Word2Vec.load("current_model")
+    new_model.build_vocab(cases, update=True)
+    new_model.train(cases, total_examples=2, epochs=1)
+    new_model.wv.vocab
+
+    return new_model
 
 
 def average_case_vector(trace, model):
@@ -256,15 +280,6 @@ def clean_case_memory(cases_in_memory):
     return cases
 
 
-def update_model(cases, word2vec_model):
-    '''
-    TODO
-    Updates word2vec model
-    '''
-    model = word2vec_model
-    return model
-
-
 """### Inicialização da base"""
 
 path = 'data/'
@@ -277,12 +292,15 @@ O número de eventos usados para criação do modelo é definido a partir da var
 """
 
 stream_window = 1000
+stream_windowed = 0
 dimensions_word2vec = 50
 window_word2vec = 3
 minimum_word2vec = 3
 
+case_ids = []
+
 df_train = df.iloc[:stream_window]
-cases_in_memory = cases_y_list(df_train)
+cases_in_memory, case_ids = cases_y_list(df_train)
 
 train_word2vec = []
 for case in cases_in_memory:
@@ -311,7 +329,10 @@ Aqui iteramos pelo dataframe que contém os eventos (simulando uma stream). Para
 * Calcular métricas da clusterização
 """
 
+stream_windowed = stream_window
+
 for event in df.iloc[stream_window:].values:
+
     if next((case for case in cases_in_memory if case.id == str(event[0])), None):
         '''
         Case já existe. Portanto, atualizamos o valor dele na lista de cases
@@ -325,9 +346,18 @@ for event in df.iloc[stream_window:].values:
         case.activities = list(event[1])
         case.label = event[2]
         cases_in_memory.append(case)
+        case_ids.append(case)
 
     vector = average_case_vector(case.activities, word2vec_model)
     auto_cloud.run(vector)
+
+    if np.size(case_ids) == stream_windowed:
+        stream_windowed += stream_window
+        train_word2vec = []
+        for case in cases_in_memory:
+            train_word2vec.append(case.activities)
+            word2vec_model = update_model(train_word2vec)
+
 
     # if condicao_janela (stream_window):
     #     cases_in_memory = clean_case_memory(cases_in_memory)
@@ -336,5 +366,5 @@ for event in df.iloc[stream_window:].values:
 print(auto_cloud.alfa)
 print(vector)
 print(np.size(auto_cloud.c))
-
-vector = vector.T
+print(vector)
+print(vector.T)
