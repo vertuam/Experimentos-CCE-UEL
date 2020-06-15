@@ -66,6 +66,7 @@ class AutoCloud:
     matrixIntersection = np.zeros((1, 1), dtype=int)
     relevanceList = np.zeros((1), dtype=int)
     k = 1
+    relacao_caso_status = {}
 
     def __init__(self, m):
         AutoCloud.m = m
@@ -140,7 +141,7 @@ class AutoCloud:
             else:
                 i += 1
 
-    def run(self, X):
+    def run(self, X, case_id):
         AutoCloud.listIntersection = np.zeros((np.size(AutoCloud.c)), dtype=int)
         if AutoCloud.k == 1:
             AutoCloud.c[0] = DataCloud(X)
@@ -160,10 +161,8 @@ class AutoCloud:
                 norm_eccentricity = eccentricity / 2
                 norm_typicality = typicality / (AutoCloud.k - 2)
 
-                #if norm_eccentricity > (AutoCloud.m ** 2 + 1) / (2 * n):
-                #    print('True')
-                #else:
-                #    print('False')
+                if (norm_eccentricity > (AutoCloud.m ** 2 + 1) / (2 * n)):
+                    self.relacao_caso_status[case_id] = [case_id, norm_eccentricity > (AutoCloud.m ** 2 + 1) / (2 * n), mean]
 
                 if (norm_eccentricity <= (AutoCloud.m ** 2 + 1) / (2 * n)):
                     data.updateDataCloud(n, mean, variance)
@@ -238,7 +237,6 @@ def update_model(cases):
     TODO
     Updates word2vec model
     '''
-    print('Updates a word2vec model.')
     new_model = Word2Vec.load("current_model")
     new_model.build_vocab(cases, update=True)
     new_model.train(cases, total_examples=2, epochs=1)
@@ -283,7 +281,7 @@ def clean_case_memory(cases_in_memory):
 """### Inicialização da base"""
 
 path = 'data/'
-log = 'sample_data.csv'
+log = 'small-0.0-1.csv'
 
 df = read_log(path, log)
 
@@ -298,6 +296,7 @@ window_word2vec = 3
 minimum_word2vec = 3
 
 case_ids = []
+kkk = pd.DataFrame([])
 
 df_train = df.iloc[:stream_window]
 cases_in_memory, case_ids = cases_y_list(df_train)
@@ -315,10 +314,11 @@ Calcula-se os vetores médios dos cases utilizados para criação do modelo word
 m = 1.7
 auto_cloud = AutoCloud(m)
 vector = np.ndarray([])
+vector_n = []
 
 vectors = average_vectors(train_word2vec, word2vec_model)
 for vector in vectors:
-    auto_cloud.run(vector)
+    auto_cloud.run(vector, 0)
 
 """### Processamento da stream de eventos
 Aqui iteramos pelo dataframe que contém os eventos (simulando uma stream). Para cada evento, verificamos se seu case já existe na lista de cases e atualizamos a lista.
@@ -349,8 +349,12 @@ for event in df.iloc[stream_window:].values:
         case_ids.append(case)
 
     vector = average_case_vector(case.activities, word2vec_model)
-    auto_cloud.run(vector)
 
+    vector_n.append(vector)
+
+    auto_cloud.run(vector, event[0])
+
+    # TODO tem que retreinar apenas os ultimos da janela para isso tem que atualizar os cases
     if np.size(case_ids) == stream_windowed:
         stream_windowed += stream_window
         train_word2vec = []
@@ -368,3 +372,16 @@ print(vector)
 print(np.size(auto_cloud.c))
 print(vector)
 print(vector.T)
+
+plt.plot(vector_n[0], vector_n[1], '.g')
+
+# Plot AutoCloud centroids
+for i in range(0, np.size(auto_cloud.c)):
+    plt.plot(auto_cloud.c[i].mean[0], auto_cloud.c[i].mean[1], 'X', color='orange')
+
+# Plot AutoCloud outliers
+print(np.size(auto_cloud.relacao_caso_status))
+for i in range(0, np.size(auto_cloud.relacao_caso_status)):
+    plt.plot(auto_cloud.relacao_caso_status[i][2][0], auto_cloud.relacao_caso_status[i][2][1], '*', color='red')
+
+plt.show()
