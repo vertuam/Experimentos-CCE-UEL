@@ -25,4 +25,4 @@ process_models = [m for m in get_process_model_files() if 'testing' not in m and
 
 for process_model in tqdm(process_models, desc='Generate'):
     #generate_for_process_model(process_model, size=100, anomalies=anomalies, drifts=drifts, anomaly_p=0.20, num_attr=[1, 2, 3, 4], seed=1337)
-    generate_for_process_model(process_model, size=1000, anomalies=anomalies, drifts=drifts, anomaly_p=0.2, num_attr=[1], seed=1337)
+    generate_for_process_model(process_model, size=1000, anomalies=anomalies, drifts=drifts, anomaly_p=1, num_attr=[1], seed=1337)
