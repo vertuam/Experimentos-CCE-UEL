@@ -12,7 +12,7 @@ Check https://github.com/delas/plg for sources and other stuff.
 	<meta>
 		<LibPLG_NAME>libPlg</LibPLG_NAME>
 		<libPLG_VERSION>2.0.3</libPLG_VERSION>
-		<name>Small_Evolved</name>
+		<name>Small_Evolved_4</name>
 		<id>bg5p2p9v5hv0h40ulg6st0k511</id>
 	</meta>
 	<!-- This is the list of all actual process elements -->
@@ -78,13 +78,21 @@ Check https://github.com/delas/plg for sources and other stuff.
 		<task id="4540" name="Activity D">
 			<script/>
 		</task>
-		<task id="4589" name="Activity F">
+
+		<task id="4592" name="Activity U">
 			<script/>
 		</task>
+		<task id="4593" name="Activity V">
+			<script/>
+		</task>
+
 		<gateway id="4544" type="ExclusiveGateway"/>
 		<gateway id="4556" type="ExclusiveGateway"/>
 		<gateway id="4557" type="ExclusiveGateway"/>
 		<gateway id="4543" type="ExclusiveGateway"/>
+		
+		<gateway id="4590" type="ExclusiveGateway"/>
+
 		<endEvent id="4534"/>
 		<sequenceFlow id="4548" sourceRef="4546" targetRef="4547"/>
 		<sequenceFlow id="4551" sourceRef="4549" targetRef="4550"/>
@@ -108,9 +116,13 @@ Check https://github.com/delas/plg for sources and other stuff.
 		<sequenceFlow id="4580" sourceRef="4558" targetRef="4544"/>
 		<sequenceFlow id="4582" sourceRef="4543" targetRef="4581"/>
 		<sequenceFlow id="4583" sourceRef="4581" targetRef="4544"/>
-		<sequenceFlow id="4584" sourceRef="4540" targetRef="4589"/>
+		<sequenceFlow id="4584" sourceRef="4540" targetRef="4590"/>
 
-		<sequenceFlow id="4590" sourceRef="4589" targetRef="4543"/>
+		<sequenceFlow id="4591" sourceRef="4590" targetRef="4592"/>
+		<sequenceFlow id="4596" sourceRef="4590" targetRef="4593"/>
+
+		<sequenceFlow id="4594" sourceRef="4592" targetRef="4543"/>
+		<sequenceFlow id="4595" sourceRef="4593" targetRef="4543"/>
 
 		<sequenceFlow id="4585" sourceRef="4544" targetRef="4545"/>
 		<sequenceFlow id="4586" sourceRef="4542" targetRef="4540"/>
