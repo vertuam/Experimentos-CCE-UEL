@@ -21,6 +21,7 @@ from gensim.models import Word2Vec
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import time
+from denstream import DenStream
 
 
 class Case:
@@ -191,405 +192,6 @@ class AutoCloud:
         AutoCloud.k = AutoCloud.k + 1
 
 
-class DenStream:
-    """
-    Manages the DenStream algorithm and implements
-    classes MicroCluster and Cluster.
-    """
-
-    def __init__(self, n_features, outlier_threshold, decay_factor, epsilon, mu, stream_speed, ncluster):
-        """
-        Initializes the DenStream class.
-        """
-        self._n_features = n_features
-        self.outlier_threshold = outlier_threshold
-        self.decay_factor = decay_factor
-        self._epsilon = epsilon
-        self._mu = mu
-        self._p_micro_clusters = {}
-        self._o_micro_clusters = {}
-        self._label = 0
-        self._time = 0
-        self._initiated = False
-        self._all_cases = set()
-        self._stream_speed = stream_speed
-        self._ncluster = ncluster
-
-    @staticmethod
-    def euclidean_distance(point1, point2):
-        """
-        Compute the Euclidean Distance between two points.
-        """
-        return np.sqrt(np.sum(np.power(point1 - point2, 2)))
-
-    def find_closest_p_mc(self, point):
-        """
-        Find the closest p_micro_cluster to the point "point" according
-        to the Euclidean Distance between it and the cluster's centroid.
-        """
-        if len(self._p_micro_clusters) == 0:
-            return None, None, None
-        distances = [(i, self.euclidean_distance(point, cluster.centroid))
-                     for i, cluster in self._p_micro_clusters.items()]
-        i, dist = min(distances, key=lambda i_dist: i_dist[1])
-        return i, self._p_micro_clusters[i], dist
-
-    def find_closest_o_mc(self, point):
-        """
-        Find the closest o_micro_cluster to the point "point" according
-        to the Euclidean Distance between it and the cluster's centroid.
-        """
-        if len(self._o_micro_clusters) == 0:
-            return None, None, None
-        distances = [(i, self.euclidean_distance(point, cluster.centroid))
-                     for i, cluster in self._o_micro_clusters.items()]
-        i, dist = min(distances, key=lambda i_dist: i_dist[1])
-        return i, self._o_micro_clusters[i], dist
-
-    def decay_p_mc(self, last_mc_updated_index=None):
-        """
-        Decay the weight of all p_micro_clusters for the exception
-        of an optional parameter last_mc_updated_index
-        """
-        for i, cluster in self._p_micro_clusters.items():
-            if i != last_mc_updated_index:
-                cluster.update(None)
-
-    def decay_o_mc(self, last_mc_updated_index=None):
-        """
-        Decay the weight of all o_micro_clusters for the exception
-        of an optional parameter last_mc_updated_index
-        """
-        for i, cluster in self._o_micro_clusters.items():
-            if i != last_mc_updated_index:
-                cluster.update(None)
-
-    def merge(self, case, t):
-        """
-        Try to add a point "point" to the existing p_micro_clusters at time "t"
-        Otherwise, try to add that point to the existing o_micro_clusters
-        If all fails, create a new o_micro_cluster with that new point
-        """
-        i, closest_p_mc, _ = self.find_closest_p_mc(case.point)
-        # Try to merge point with closest p_mc
-        if (closest_p_mc and
-                closest_p_mc.radius_with_new_point(case.point) <= self._epsilon):
-            closest_p_mc.update(case)
-        else:
-            i, closest_o_mc, _ = self.find_closest_o_mc(case.point)
-            # Try to merge point with closest o_mc
-            if (closest_o_mc and
-                    closest_o_mc.radius_with_new_point(case.point) <= self._epsilon):
-                closest_o_mc.update(case)
-                # Try to promote o_micro_clusters to p_mc
-                if closest_o_mc._weight > self._beta * self._mu:
-                    del self._o_micro_clusters[i]
-                    self._p_micro_clusters[self._label] = closest_o_mc
-            else:
-                # create new o_mc containing the new point
-                new_o_mc = self.MicroCluster(n_features=self._n_features,
-                                             creation_time=t,
-                                             lambda_=self._lambda,
-                                             stream_speed=self._stream_speed)
-                new_o_mc.update(case)
-                self._label += 1
-                self._o_micro_clusters[self._label] = new_o_mc
-
-        for i, cluster in self._p_micro_clusters.items():
-            if cluster._count_to_decay == 0:
-                cluster.update(None)
-                cluster._count_to_decay = cluster._stream_speed
-                if cluster in self._p_micro_clusters and cluster._weight < self._beta * self._mu:
-                    del self._p_micro_clusters[i]
-                    self._o_micro_clusters[i] = cluster
-            else:
-                cluster._count_to_decay = cluster._count_to_decay - 1
-        for i, cluster in self._o_micro_clusters.items():
-            if cluster._count_to_decay == 0:
-                cluster.update(None)
-                cluster._count_to_decay = cluster._stream_speed
-            else:
-                cluster._count_to_decay = cluster._count_to_decay - 1
-
-    def train(self, case):
-        """
-        "Train" Denstream by updating its p_micro_clusters and o_micro_clusters
-        with a new point "point"
-        """
-        # clean case
-        if case.id in self._all_cases:
-            removed = False
-            for mc in self._p_micro_clusters.values():
-                if case.id in mc._case_ids:
-                    mc._case_ids.remove(case.id)
-                    removed = True
-                    break
-            if not removed:
-                for mc in self._o_micro_clusters.values():
-                    if case.id in mc._case_ids:
-                        mc._case_ids.remove(case.id)
-                        break
-        else:
-            self._all_cases.add(case.id)
-
-        self._time += 1
-        if not self._initiated:
-            raise Exception
-
-        t = self._time
-        # Compute Tp
-        try:
-            part = (self._beta * self._mu) / (self._beta * self._mu - 1)
-            Tp = math.ceil(1 / self._lambda * math.log2(part))
-        except:
-            Tp = 1
-
-        # Add point
-        self.merge(case, self._time)
-
-        # Test if should remove any p_micro_cluster or o_micro_cluster
-        if t % Tp == 0:
-            for i in list(self._p_micro_clusters.keys()):
-                cluster = self._p_micro_clusters[i]
-                if cluster._weight < self._beta * self._mu:
-                    del self._p_micro_clusters[i]
-
-            for i in list(self._o_micro_clusters.keys()):
-                cluster = self._o_micro_clusters[i]
-                to = cluster._creation_time
-                e = ((math.pow(2, - self._lambda * (t - to + Tp)) - 1) /
-                     (math.pow(2, - self._lambda * Tp) - 1))
-                if cluster._weight < e:
-                    del self._o_micro_clusters[i]
-
-    def is_normal(self, point):
-        """
-        Find if point "point" is inside any p_micro_cluster
-        """
-        if len(self._p_micro_clusters) == 0:
-            return False
-
-        distances = [(i, self.euclidean_distance(point, cluster.centroid))
-                     for i, cluster in self._p_micro_clusters.items()]
-        for i, dist in distances:
-            if dist <= self._epsilon:
-                return True
-        return False
-
-    def DBSCAN(self, buffer):
-        """
-        Perform DBSCAN to create initial p_micro_clusters
-        Works by grouping points with distance <= self._epsilon
-        and filtering groups that are not dense enough (weight >= beta * mu)
-        """
-        used_cases = set()
-        for case in (case for case in buffer if case.id not in used_cases):
-            used_cases.add(case.id)
-            group = [case]
-            for other_case in (case for case in buffer if case.id not in used_cases):
-                dist = self.euclidean_distance(case.point,
-                                               other_case.point)
-                if dist <= self._epsilon:
-                    group.append(other_case)
-
-            weight = len(group)
-            if weight >= self._beta * self._mu:
-                new_p_mc = self.MicroCluster(n_features=self._n_features,
-                                             creation_time=0,
-                                             lambda_=self._lambda,
-                                             stream_speed=self._stream_speed)
-                for case in group:
-                    used_cases.add(case.id)
-                    new_p_mc.update(case)
-                    self._all_cases.add(case.id)
-                self._label += 1
-                self._p_micro_clusters[self._label] = new_p_mc
-
-            else:
-                used_cases.remove(case.id)
-        self._initiated = True
-
-    def generate_clusters(self):
-        """
-        Perform DBSCAN to create the final c_micro_clusters
-        Works by grouping dense enough p_micro_clusters (weight >= mu)
-        with distance <= 2 * self._epsilon
-        """
-        if len(self._p_micro_clusters) > 1:
-            connected_clusters = []
-            remaining_clusters = deque((self.Cluster(id=i,
-                                                     centroid=mc.centroid,
-                                                     radius=mc.radius,
-                                                     weight=mc._weight,
-                                                     case_ids=mc._case_ids)
-                                        for i, mc in self._p_micro_clusters.items()))
-
-            testing_group = -1
-            # try to add the remaining clusters to existing groups
-            while remaining_clusters:
-                # create a new group
-                connected_clusters.append([remaining_clusters.popleft()])
-                testing_group += 1
-                change = True
-                while change:
-                    change = False
-                    buffer_ = deque()
-                    # try to add remaining clusters
-                    # to the existing group as it is
-                    # if we add a new cluster to that group,
-                    # perform the check again
-                    while remaining_clusters:
-                        r_cluster = remaining_clusters.popleft()
-                        to_add = False
-                        for cluster in connected_clusters[testing_group]:
-                            dist = self.euclidean_distance(cluster.centroid,
-                                                           r_cluster.centroid)
-                            if dist <= 2 * self._epsilon:
-                                to_add = True
-                                break
-                        if to_add:
-                            connected_clusters[testing_group].append(r_cluster)
-                            change = True
-                        else:
-                            buffer_.append(r_cluster)
-                    remaining_clusters = buffer_
-
-            dense_groups, not_dense_groups = [], []
-            for group in connected_clusters:
-                if sum([c.weight for c in group]) >= self._mu:
-                    dense_groups.append(group)
-                else:
-                    not_dense_groups.append(group)
-            if len(dense_groups) == 0:
-                dense_groups = [[]]
-            if len(not_dense_groups) == 0:
-                not_dense_groups = [[]]
-
-            return dense_groups, not_dense_groups
-
-        # only one p_micro_cluster (check if it is dense enough)
-        elif len(self._p_micro_clusters) == 1:
-            mc = list(self._p_micro_clusters.values())[0]
-            id = list(self._p_micro_clusters.keys())[0]
-            centroid = mc.centroid
-            radius = mc.radius
-            case_ids = mc._case_ids
-            weight = mc._weight
-            if weight >= self._mu:
-                return [[self.Cluster(id=id,
-                                      centroid=centroid,
-                                      radius=radius,
-                                      weight=weight,
-                                      case_ids=case_ids)]], [[]]
-            else:
-                return [[]], [[self.Cluster(id=id,
-                                            centroid=centroid,
-                                            radius=radius,
-                                            weight=weight,
-                                            case_ids=case_ids)]]
-        return [[]], [[]]
-
-    def generate_outlier_clusters(self):
-        """
-        Generates a list of o-micro-clusters.
-        """
-        return [self.Cluster(id=i,
-                             centroid=mc.centroid,
-                             radius=mc.radius,
-                             weight=mc._weight,
-                             case_ids=mc._case_ids)
-                for i, mc in self._o_micro_clusters.items()]
-
-    class MicroCluster:
-        """
-        The class represents a micro-cluster and its attributes.
-        """
-
-        def __init__(self, n_features, creation_time, lambda_, stream_speed):
-            """
-            Initializes the MicroCluster attributes.
-            """
-            self._CF = np.zeros(n_features)
-            self._CF2 = np.zeros(n_features)
-            self._weight = 0
-            self._creation_time = creation_time
-            self._case_ids = set()
-            self._lambda = lambda_
-            self._stream_speed = stream_speed
-            self._count_to_decay = self._stream_speed
-
-        @property
-        def centroid(self):
-            """
-            Computes and returns the micro-cluster's centroid value,
-            which is given by CF divided by weight.
-            """
-            return self._CF / self._weight
-
-        @property
-        def radius(self):
-            """
-            Computes and returns the micro-cluster's radius.
-            """
-            A = np.sqrt(np.sum(np.square(self._CF2))) / self._weight
-            B = np.square(np.sqrt(np.sum(np.square(self._CF))) / self._weight)
-            S = A - B
-            if S < 0:
-                S = 0
-            return sqrt(S)
-
-        def radius_with_new_point(self, point):
-            """
-            Computes the micro-cluster's radius considering a new point.
-            The returned value is then compared to self._epsilon to check
-            whether the point must be absorbed or not.
-            """
-            CF1 = self._CF + point
-            CF2 = self._CF2 + point * point
-            weight = self._weight + 1
-
-            A = np.sqrt(np.sum(np.square(CF2))) / weight
-            B = np.square(np.sqrt(np.sum(np.square(CF1))) / weight)
-            S = A - B
-            if S < 0:
-                S = 0
-            return sqrt(S)
-
-        def update(self, case):
-            """
-            Updates the micro-cluster weights either
-            considering a new case or not.
-            """
-            if case is None:
-                factor = 2 ** (-self._lambda)
-                self._CF *= factor
-                self._CF2 *= factor
-                self._weight *= factor
-            else:
-                self._CF += case.point
-                self._CF2 += case.point * case.point
-                self._weight += 1
-                self._case_ids.add(case.id)
-
-    class Cluster:
-        """
-        Class that represents a cluster.
-        """
-
-        def __init__(self, id, centroid, radius, weight, case_ids):
-            """
-            Initializes a cluster.
-            """
-            self.id = id
-            self.centroid = centroid
-            self.radius = radius
-            self.weight = weight
-            self.case_ids = case_ids
-
-        # def __str__(self):
-        #     return f'{self.id} - Centroid: {self.centroid} | Radius: {self.radius}'
-
-
 def read_log(path, log):
     '''
     Reads and preprocesses event log
@@ -753,7 +355,7 @@ for event in df.iloc[stream_window:].values:
 
     vector = average_case_vector(case.activities, word2vec_model)
 
-    # vector_n.append(vector)
+    vector_n.append(vector)
 
     auto_cloud.run(vector, event[0])
 
@@ -773,8 +375,9 @@ print(vector)
 print(np.size(auto_cloud.c))
 print(vector.T)
 
+# Plot Amostras
 for i in range(0, np.size(vector)):
-    plt.plot(vector, '.g')
+    plt.plot(vector_n[i][0], vector_n[i][1], '.g')
 
 # Plot AutoCloud centroids
 for i in range(0, np.size(auto_cloud.c)):
@@ -787,6 +390,9 @@ for i in range(1, np.size(auto_cloud.relacao_caso_status)):
 
 plt.show()
 
+np.random.seed(19680801)
+
+
 # hyperparameters configuration :: DenStream
 n_features = 2
 decay_factor_ = 0.15
@@ -798,18 +404,3 @@ stream_speed = 1000
 start_time = time.time()
 event_stream = pd.read_csv(f'{path}/{log}')
 event_stream = event_stream.values
-
-denstream_kwargs = {'n_features': n_features,
-                    'outlier_threshold': outlier_threshold_,
-                    'decay_factor': decay_factor_,
-                    'epsilon': epsilon,
-                    'mu': mu,
-                    'stream_speed': stream_speed,
-                    'ncluster': 0}
-
-_denstream = DenStream(**denstream_kwargs)
-
-# initialise denstream
-_denstream.DBSCAN(vector)
-
-print(_denstream)
